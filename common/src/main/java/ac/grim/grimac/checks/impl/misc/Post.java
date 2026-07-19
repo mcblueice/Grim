@@ -94,10 +94,13 @@ public class Post extends Check implements PacketCheck, PostPredictionCheck {
         }
 
         if (PLAYER_ABILITIES.equals(packetType)
-                || (HELD_ITEM_CHANGE.equals(packetType) && player.getClientVersion().isNewerThanOrEquals(ClientVersion.V_1_8))
-                || INTERACT_ENTITY.equals(packetType) || PLAYER_BLOCK_PLACEMENT.equals(packetType)
-                || ATTACK.equals(packetType) || SPECTATE_ENTITY.equals(packetType)
-                || USE_ITEM.equals(packetType) || PLAYER_DIGGING.equals(packetType)) {
+                // || (HELD_ITEM_CHANGE.equals(packetType) && player.getClientVersion().isNewerThanOrEquals(ClientVersion.V_1_8))
+                || INTERACT_ENTITY.equals(packetType)
+                // || PLAYER_BLOCK_PLACEMENT.equals(packetType)
+                || ATTACK.equals(packetType)
+                || SPECTATE_ENTITY.equals(packetType)
+                // || USE_ITEM.equals(packetType)
+                || PLAYER_DIGGING.equals(packetType)) {
             post.add(event.getPacketType());
         } else if (CLICK_WINDOW.equals(packetType) && player.getClientVersion().isOlderThan(ClientVersion.V_1_13)) {
             // Why do 1.13+ players send the click window packet whenever? This doesn't make sense.

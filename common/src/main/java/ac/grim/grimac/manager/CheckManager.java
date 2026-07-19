@@ -3,7 +3,6 @@ package ac.grim.grimac.manager;
 import ac.grim.grimac.GrimAPI;
 import ac.grim.grimac.api.AbstractCheck;
 import ac.grim.grimac.checks.Check;
-import ac.grim.grimac.checks.impl.aim.AimDuplicateLook;
 import ac.grim.grimac.checks.impl.aim.AimModulo360;
 import ac.grim.grimac.checks.impl.aim.processor.AimProcessor;
 import ac.grim.grimac.checks.impl.badpackets.*;
@@ -59,6 +58,7 @@ import com.github.retrooper.packetevents.event.PacketReceiveEvent;
 import com.github.retrooper.packetevents.event.PacketSendEvent;
 import com.google.common.collect.ClassToInstanceMap;
 import com.google.common.collect.ImmutableClassToInstanceMap;
+import lombok.Getter;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -77,6 +77,8 @@ public class CheckManager {
     private final ClassToInstanceMap<BlockBreakCheck> blockBreakChecks;
     private final ClassToInstanceMap<BlockPlaceCheck> blockPlaceChecks;
     private final ClassToInstanceMap<PostPredictionCheck> postPredictionChecks;
+    @Getter
+    private final PacketEntityReplication packetEntityReplication;
 
     private final List<PacketCheck> preViaPacketChecksValues;
     private final List<PacketCheck> packetChecksValues;
@@ -89,6 +91,8 @@ public class CheckManager {
     private final List<PostPredictionCheck> postPredictionChecksValues;
 
     public CheckManager(GrimPlayer player) {
+        packetEntityReplication = new PacketEntityReplication(player);
+
         preViaPacketChecks = new ImmutableClassToInstanceMap.Builder<PacketCheck>()
                 .put(CompensatedCameraEntity.class, player.cameraEntity)
                 .put(ChatA.class, new ChatA(player))
@@ -119,7 +123,7 @@ public class CheckManager {
         packetChecks = new ImmutableClassToInstanceMap.Builder<PacketCheck>()
                 .put(PacketOrderProcessor.class, player.packetOrderProcessor)
                 .put(Reach.class, new Reach(player))
-                .put(PacketEntityReplication.class, player.packetEntityReplication)
+                .put(PacketEntityReplication.class, packetEntityReplication)
                 .put(PacketChangeGameState.class, new PacketChangeGameState(player))
                 .put(CompensatedInventory.class, player.inventory)
                 .put(PacketPlayerAbilities.class, new PacketPlayerAbilities(player))
@@ -132,7 +136,7 @@ public class CheckManager {
                 .put(ExploitB.class, new ExploitB(player))
                 .put(BadPacketsD.class, new BadPacketsD(player))
                 .put(BadPacketsE.class, new BadPacketsE(player))
-                .put(BadPacketsJ.class, new BadPacketsJ(player))
+                // .put(BadPacketsJ.class, new BadPacketsJ(player))
                 .put(BadPacketsL.class, new BadPacketsL(player))
                 .put(BadPacketsO.class, new BadPacketsO(player))
                 .put(BadPacketsP.class, new BadPacketsP(player))
@@ -142,7 +146,7 @@ public class CheckManager {
                 .put(BadPacketsT.class, new BadPacketsT(player))
                 .put(BadPacketsU.class, new BadPacketsU(player))
                 .put(BadPacketsV.class, new BadPacketsV(player))
-                .put(MultiActionsC.class, new MultiActionsC(player))
+                // .put(MultiActionsC.class, new MultiActionsC(player))
                 .put(MultiActionsD.class, new MultiActionsD(player))
                 .put(PacketOrderO.class, new PacketOrderO(player))
 //                .put(PacketOrderP.class, new PacketOrderP(player))
@@ -165,7 +169,7 @@ public class CheckManager {
         rotationChecks = new ImmutableClassToInstanceMap.Builder<RotationCheck>()
                 .put(AimProcessor.class, new AimProcessor(player))
                 .put(AimModulo360.class, new AimModulo360(player))
-                .put(AimDuplicateLook.class, new AimDuplicateLook(player))
+                // .put(AimDuplicateLook.class, new AimDuplicateLook(player))
                 .build();
         vehicleChecks = new ImmutableClassToInstanceMap.Builder<VehicleCheck>()
                 .put(VehiclePredictionRunner.class, new VehiclePredictionRunner(player))
@@ -221,16 +225,16 @@ public class CheckManager {
         blockPlaceChecks = new ImmutableClassToInstanceMap.Builder<BlockPlaceCheck>()
                 .put(InvalidPlaceA.class, new InvalidPlaceA(player))
                 .put(InvalidPlaceB.class, new InvalidPlaceB(player))
-                .put(AirLiquidPlace.class, new AirLiquidPlace(player))
+                //.put(AirLiquidPlace.class, new AirLiquidPlace(player))
                 .put(MultiPlace.class, new MultiPlace(player))
                 .put(MultiActionsF.class, new MultiActionsF(player))
-                .put(MultiActionsG.class, new MultiActionsG(player))
+                //.put(MultiActionsG.class, new MultiActionsG(player))
                 .put(BadPacketsH.class, new BadPacketsH(player))
                 .put(CrashG.class, new CrashG(player))
                 .put(FarPlace.class, new FarPlace(player))
                 .put(FabricatedPlace.class, new FabricatedPlace(player))
-                .put(PositionPlace.class, new PositionPlace(player))
-                .put(RotationPlace.class, new RotationPlace(player))
+                // .put(PositionPlace.class, new PositionPlace(player))
+                // .put(RotationPlace.class, new RotationPlace(player))
                 .put(PacketOrderN.class, new PacketOrderN(player))
                 .put(DuplicateRotPlace.class, new DuplicateRotPlace(player))
                 .put(GhostBlockMitigation.class, new GhostBlockMitigation(player))
@@ -497,7 +501,8 @@ public class CheckManager {
             if (check.getConfigName() == null) continue;
             final String id = check.getConfigName().toLowerCase();
             for (String permissionName : permissions) {
-                GrimAPI.INSTANCE.getPermissionManager().registerPermission(permissionName + id, PermissionDefaultValue.FALSE);
+                permissionName += id;
+                GrimAPI.INSTANCE.getPermissionManager().registerPermission(permissionName, PermissionDefaultValue.FALSE);
             }
         }
     }
