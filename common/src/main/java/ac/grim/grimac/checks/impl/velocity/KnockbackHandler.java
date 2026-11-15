@@ -4,7 +4,8 @@ import ac.grim.grimac.api.config.ConfigManager;
 import ac.grim.grimac.api.storage.verbose.Verbose;
 import ac.grim.grimac.checks.Check;
 import ac.grim.grimac.checks.CheckData;
-import ac.grim.grimac.checks.type.PostPredictionCheck;
+import ac.grim.grimac.checks.type.PacketSendListener;
+import ac.grim.grimac.checks.type.PostPredictionListener;
 import ac.grim.grimac.player.GrimPlayer;
 import ac.grim.grimac.utils.anticheat.update.PredictionComplete;
 import ac.grim.grimac.utils.data.Pair;
@@ -23,7 +24,7 @@ import java.util.LinkedList;
 
 // We are making a velocity sandwich between two pieces of transaction packets (bread)
 @CheckData(name = "AntiKB", stableKey = "grim.velocity.anti_knockback", alternativeName = "AntiKnockback", configName = "Knockback", description = "Did not take the expected entity knockback", setback = 10, decay = 0.025)
-public class KnockbackHandler extends Check implements PostPredictionCheck {
+public class KnockbackHandler extends Check implements PacketSendListener, PostPredictionListener {
     private static final Verbose V = Verbose.of("[ignored knockback|o: {offset}]");
 
     private final Deque<VelocityData> firstBreadMap = new LinkedList<>();
@@ -63,7 +64,7 @@ public class KnockbackHandler extends Check implements PostPredictionCheck {
 
             // Blacklist problemated vector until mojang fixes a client-sided bug
             if (playerVelocity.getY() == -0.04) {
-                velocity.setVelocity(playerVelocity.add(new Vector3d(0, 1 / 8000D, 0)));
+                velocity.setVelocity(playerVelocity.add(0, 1 / 8000D, 0));
                 playerVelocity = velocity.getVelocity();
                 event.markForReEncode(true);
             }
@@ -248,7 +249,7 @@ public class KnockbackHandler extends Check implements PostPredictionCheck {
     }
 
     @Override
-    public void onReload(ConfigManager config) {
+    public void onReload(@NotNull ConfigManager config) {
         offsetToFlag = config.getDoubleElse("Knockback.threshold", 0.001);
         maxAdv = config.getDoubleElse("Knockback.max-advantage", 1);
         immediate = config.getDoubleElse("Knockback.immediate-setback-threshold", 0.1);

@@ -3,6 +3,8 @@ package ac.grim.grimac.checks.impl.scaffolding;
 import ac.grim.grimac.api.storage.verbose.Verbose;
 import ac.grim.grimac.checks.CheckData;
 import ac.grim.grimac.checks.type.BlockPlaceCheck;
+import ac.grim.grimac.checks.type.BlockPlaceListener;
+import ac.grim.grimac.checks.type.PostFlyingBlockPlaceListener;
 import ac.grim.grimac.player.GrimPlayer;
 import ac.grim.grimac.utils.anticheat.update.BlockPlace;
 import ac.grim.grimac.utils.collisions.datatypes.SimpleCollisionBox;
@@ -22,7 +24,7 @@ import java.util.Collections;
 import java.util.List;
 
 @CheckData(name = "RotationPlace", stableKey = "grim.scaffolding.rotation_place", description = "Placed a block while not looking at it")
-public class RotationPlace extends BlockPlaceCheck {
+public class RotationPlace extends BlockPlaceCheck implements BlockPlaceListener, PostFlyingBlockPlaceListener {
     private static final Verbose V = Verbose.of("[pre-flying|post-flying]");
 
     private double flagBuffer = 0; // If the player flags once, force them to play legit, or we will cancel the tick before.
@@ -66,9 +68,15 @@ public class RotationPlace extends BlockPlaceCheck {
         // This can false with rapidly moving yaw in 1.8+ clients
         if (!hit) {
             flagBuffer = 1;
-            flag(V.write(verbose()).bool(false));
+            if (!ignorePost) { // Don't flag twice
+                flag(V.write(verbose()).bool(false));
+            }
         } else {
             flagBuffer = Math.max(0, flagBuffer - 0.1);
+        }
+
+        if (ignorePost) {
+            ignorePost = false;
         }
     }
 
@@ -113,10 +121,9 @@ public class RotationPlace extends BlockPlaceCheck {
         for (double d : possibleEyeHeights) {
             for (Vector3f lookDir : possibleLookDirs) {
                 // x, y, z are correct for the block placement even after post tick because of code elsewhere
-                Vector3d starting = new Vector3d(player.x, player.y + d, player.z);
                 // xRot and yRot are a tick behind
-                Ray trace = new Ray(player, starting.getX(), starting.getY(), starting.getZ(), lookDir.getX(), lookDir.getY());
-                Pair<Vector3d, BlockFace> intercept = ReachUtils.calculateIntercept(box, trace.origin(), trace.getPointAtDistance(distance));
+                Ray trace = Ray.from(player, player.x, player.y + d, player.z, lookDir.getX(), lookDir.getY());
+                Pair<Vector3d, BlockFace> intercept = ReachUtils.calculateIntercept(box, trace, distance);
 
                 if (intercept.first() != null) return true;
             }

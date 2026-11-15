@@ -1,10 +1,9 @@
 package ac.grim.grimac.predictionengine;
 
 import ac.grim.grimac.api.config.ConfigManager;
-import ac.grim.grimac.checks.Check;
+import ac.grim.grimac.checks.GrimProcessor;
 import ac.grim.grimac.checks.impl.prediction.Phase;
 import ac.grim.grimac.checks.impl.vehicle.VehicleC;
-import ac.grim.grimac.checks.type.PositionCheck;
 import ac.grim.grimac.manager.SetbackTeleportUtil;
 import ac.grim.grimac.player.GrimPlayer;
 import ac.grim.grimac.predictionengine.movementtick.MovementTickerCamel;
@@ -51,8 +50,9 @@ import com.github.retrooper.packetevents.protocol.player.ClientVersion;
 import com.github.retrooper.packetevents.protocol.player.GameMode;
 import com.github.retrooper.packetevents.protocol.world.states.defaulttags.BlockTags;
 import com.github.retrooper.packetevents.protocol.world.states.type.StateTypes;
+import org.jetbrains.annotations.NotNull;
 
-public class MovementCheckRunner extends Check implements PositionCheck {
+public class MovementCheckRunner extends GrimProcessor {
     // Averaged over 500 predictions (Defaults set slightly above my 3600x results)
     public static double predictionNanos = 0.3 * 1e6;
     // Averaged over 20000 predictions
@@ -136,7 +136,7 @@ public class MovementCheckRunner extends Check implements PositionCheck {
         // Manually call prediction complete to handle teleport
         PredictionComplete predictionComplete = new PredictionComplete(0, update, true);
         player.getSetbackTeleportUtil().onPredictionComplete(predictionComplete);
-        player.checkManager.getPostPredictionCheck(Phase.class).onPredictionComplete(predictionComplete);
+        player.checkManager.get(Phase.class).onPredictionComplete(predictionComplete);
 
         player.uncertaintyHandler.lastHorizontalOffset = 0;
         player.uncertaintyHandler.lastVerticalOffset = 0;
@@ -148,6 +148,7 @@ public class MovementCheckRunner extends Check implements PositionCheck {
             return;
         }
 
+        player.intersectedWithNetherPortal = false;
         player.onGround = update.isOnGround();
 
         // This is here to prevent abuse of sneaking
@@ -236,7 +237,7 @@ public class MovementCheckRunner extends Check implements PositionCheck {
             } else {
                 // Server always teleports the player when they eject anyways,
                 // so just let the player control where they eject within reason, they get set back anyways
-                if (new Vector3dm(player.lastX, player.lastY, player.lastZ).distance(new Vector3dm(player.x, player.y, player.z)) > 3) {
+                if (VectorUtils.distance(player.lastX, player.lastY, player.lastZ, player.x, player.y, player.z) > 3) {
                     player.getSetbackTeleportUtil().executeForceResync(); // Too far! (I think this value is sane)
                 }
 
@@ -244,7 +245,7 @@ public class MovementCheckRunner extends Check implements PositionCheck {
 
                 if (player.isClimbing) {
                     Vector3dm ladder = player.clientVelocity.clone().setY(0.2);
-                    PredictionEngineNormal.staticVectorEndOfTick(player, ladder);
+                    PredictionEngineNormal.staticVectorEndOfTick(player, ladder, player.clientVelocity.getY());
                     player.lastWasClimbing = ladder.getY();
                 }
                 return;
@@ -295,7 +296,7 @@ public class MovementCheckRunner extends Check implements PositionCheck {
 
             // For whatever reason the vehicle move packet occurs AFTER the player changes slots...
             if (riding instanceof PacketEntityRideable) {
-                VehicleC vehicleC = player.checkManager.getCheck(VehicleC.class);
+                VehicleC vehicleC = player.checkManager.get(VehicleC.class);
 
                 ItemType requiredItem = riding.getType() == EntityTypes.PIG ? ItemTypes.CARROT_ON_A_STICK : ItemTypes.WARPED_FUNGUS_ON_A_STICK;
                 ItemStack mainHand = player.inventory.getHeldItem();
@@ -393,6 +394,7 @@ public class MovementCheckRunner extends Check implements PositionCheck {
                     player.uncertaintyHandler.isSteppingOnBouncyBlock = true;
                 }
             }
+
             if (block.getType() == StateTypes.HONEY_BLOCK) {
                 if (player.getClientVersion().isOlderThanOrEquals(ClientVersion.V_1_14)
                         && player.getClientVersion().isNewerThanOrEquals(ClientVersion.V_1_8)) {
@@ -402,15 +404,25 @@ public class MovementCheckRunner extends Check implements PositionCheck {
                 }
                 player.uncertaintyHandler.isSteppingOnHoney = true;
             }
+
             if (BlockTags.BEDS.contains(block.getType()) && Math.abs((y + 0.5625D) - player.lastY) <= player.getMovementThreshold() && player.getClientVersion().isNewerThanOrEquals(ClientVersion.V_1_12)) {
                 player.uncertaintyHandler.isSteppingOnBouncyBlock = true;
             }
+
+            if (block.getType() == StateTypes.SHELF_MUSHROOM && player.getClientVersion().isNewerThanOrEquals(ClientVersion.V_26_3)
+                    && (Math.abs((y + 0.6875) - player.lastY) <= player.getMovementThreshold()
+                    || Math.abs((y + (block.getAge() == 0 ? 0.5625 : 0.5)) - player.lastY) <= player.getMovementThreshold())) {
+                player.uncertaintyHandler.isSteppingOnBouncyBlock = true;
+            }
+
             if (BlockTags.ICE.contains(block.getType())) {
                 player.uncertaintyHandler.isSteppingOnIce = true;
             }
+
             if (block.getType() == StateTypes.BUBBLE_COLUMN && player.getClientVersion().isNewerThanOrEquals(ClientVersion.V_1_13)) {
                 player.uncertaintyHandler.isSteppingNearBubbleColumn = true;
             }
+
             if (block.getType() == StateTypes.SCAFFOLDING) {
                 player.uncertaintyHandler.isSteppingNearScaffolding = true;
             }
@@ -603,8 +615,6 @@ public class MovementCheckRunner extends Check implements PositionCheck {
 
         player.wasLastPredictionCompleteChecked = wasChecked;
 
-        player.updateNetherPortalState();
-
         // Patch sprint jumping with elytra exploit
         if (player.platformPlayer != null && player.isGliding && player.predictedVelocity.isJump() && player.isSprinting && !allowSprintJumpingWithElytra) {
             SetbackTeleportUtil.SetbackPosWithVector lastKnownGoodPosition = player.getSetbackTeleportUtil().lastKnownGoodPosition;
@@ -702,7 +712,7 @@ public class MovementCheckRunner extends Check implements PositionCheck {
     }
 
     @Override
-    public void onReload(ConfigManager config) {
+    public void onReload(@NotNull ConfigManager config) {
         allowSprintJumpingWithElytra = config.getBooleanElse("exploit.allow-sprint-jumping-when-using-elytra", true);
     }
 }
