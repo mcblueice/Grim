@@ -60,7 +60,6 @@ import com.github.retrooper.packetevents.event.PacketReceiveEvent;
 import com.github.retrooper.packetevents.event.PacketSendEvent;
 import com.google.common.collect.ClassToInstanceMap;
 import com.google.common.collect.ImmutableClassToInstanceMap;
-import lombok.Getter;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
@@ -71,33 +70,25 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class CheckManager implements BasicReloadable {
     private static final AtomicBoolean initedAtomic = new AtomicBoolean(false);
     private static boolean inited;
-    public final ClassToInstanceMap<AbstractCheck> allChecks;
-    private final ClassToInstanceMap<PacketCheck> preViaPacketChecks;
-    private final ClassToInstanceMap<PacketCheck> packetChecks;
-    private final ClassToInstanceMap<PositionCheck> positionChecks;
-    private final ClassToInstanceMap<RotationCheck> rotationChecks;
-    private final ClassToInstanceMap<VehicleCheck> vehicleChecks;
-    private final ClassToInstanceMap<PacketCheck> prePredictionChecks;
-    private final ClassToInstanceMap<BlockBreakCheck> blockBreakChecks;
-    private final ClassToInstanceMap<BlockPlaceCheck> blockPlaceChecks;
-    private final ClassToInstanceMap<PostPredictionCheck> postPredictionChecks;
-    @Getter
-    private final PacketEntityReplication packetEntityReplication;
+    public final ClassToInstanceMap<AbstractProcessor> processors;
+    public final Collection<AbstractCheck> checks;
 
-    private final List<PacketCheck> preViaPacketChecksValues;
-    private final List<PacketCheck> packetChecksValues;
-    private final List<PositionCheck> positionChecksValues;
-    private final List<RotationCheck> rotationChecksValues;
-    private final List<VehicleCheck> vehicleChecksValues;
-    private final List<PacketCheck> prePredictionChecksValues;
-    private final List<BlockBreakCheck> blockBreakChecksValues;
-    private final List<BlockPlaceCheck> blockPlaceChecksValues;
-    private final List<PostPredictionCheck> postPredictionChecksValues;
+    private final PreViaPacketReceiveListener[] preViaPacketReceiveListeners;
+    private final PreViaPacketSendListener[] preViaPacketSendListeners;
+    private final PacketReceiveListener[] packetReceiveListeners;
+    private final PacketSendListener[] packetSendListeners;
+    private final PositionListener[] positionListeners;
+    private final RotationListener[] rotationListeners;
+    private final VehicleListener[] vehicleListeners;
+    private final PrePredictionPacketReceiveListener[] prePredictionPacketReceiveListeners;
+    private final BlockBreakListener[] blockBreakListeners;
+    private final BlockPlaceListener[] blockPlaceListeners;
+    private final PostFlyingBlockPlaceListener[] postFlyingBlockPlaceListeners;
+    private final PostFlyingBlockBreakListener[] postFlyingBlockBreakListeners;
+    private final PostPredictionListener[] postPredictionListeners;
 
     public CheckManager(GrimPlayer player) {
-        packetEntityReplication = new PacketEntityReplication(player);
-
-        preViaPacketChecks = new ImmutableClassToInstanceMap.Builder<PacketCheck>()
+        processors = new ImmutableClassToInstanceMap.Builder<AbstractProcessor>()
                 .put(CompensatedCameraEntity.class, player.cameraEntity)
                 .put(ChatA.class, new ChatA(player))
                 .put(ChatB.class, new ChatB(player))
@@ -124,7 +115,7 @@ public class CheckManager implements BasicReloadable {
         // TODO: migrate the rest of these to pre-via
                 .put(PacketOrderProcessor.class, player.packetOrderProcessor)
                 .put(Reach.class, new Reach(player))
-                .put(PacketEntityReplication.class, packetEntityReplication)
+                .put(PacketEntityReplication.class, player.packetEntityReplication)
                 .put(PacketChangeGameState.class, new PacketChangeGameState(player))
                 .put(CompensatedInventory.class, player.inventory)
                 .put(PacketPlayerAbilities.class, new PacketPlayerAbilities(player))
@@ -167,8 +158,6 @@ public class CheckManager implements BasicReloadable {
                 .put(AimProcessor.class, new AimProcessor(player))
                 .put(AimModulo360.class, new AimModulo360(player))
                 // .put(AimDuplicateLook.class, new AimDuplicateLook(player))
-                .build();
-        vehicleChecks = new ImmutableClassToInstanceMap.Builder<VehicleCheck>()
                 .put(VehiclePredictionRunner.class, new VehiclePredictionRunner(player))
 
                 .put(NegativeTimer.class, new NegativeTimer(player))
@@ -218,10 +207,10 @@ public class CheckManager implements BasicReloadable {
 
                 .put(InvalidPlaceCursor.class, new InvalidPlaceCursor(player))
                 .put(InvalidPlaceFace.class, new InvalidPlaceFace(player))
-                //.put(AirLiquidPlace.class, new AirLiquidPlace(player))
+                // .put(AirLiquidPlace.class, new AirLiquidPlace(player))
                 .put(MultiPlace.class, new MultiPlace(player))
                 .put(MultiActionsF.class, new MultiActionsF(player))
-                //.put(MultiActionsG.class, new MultiActionsG(player))
+                // .put(MultiActionsG.class, new MultiActionsG(player))
                 .put(BadPacketsH.class, new BadPacketsH(player))
                 .put(CrashG.class, new CrashG(player))
                 .put(FarPlace.class, new FarPlace(player))
@@ -462,8 +451,7 @@ public class CheckManager implements BasicReloadable {
             if (check.getConfigName() == null) continue;
             final String id = check.getConfigName().toLowerCase();
             for (String permissionName : permissions) {
-                permissionName += id;
-                GrimAPI.INSTANCE.getPermissionManager().registerPermission(permissionName, PermissionDefaultValue.FALSE);
+                GrimAPI.INSTANCE.getPermissionManager().registerPermission(permissionName + id, PermissionDefaultValue.FALSE);
             }
         }
     }
