@@ -4,6 +4,7 @@ import ac.grim.grimac.GrimAPI;
 import ac.grim.grimac.api.PacketWorld;
 import ac.grim.grimac.player.GrimPlayer;
 import ac.grim.grimac.utils.change.BlockModification;
+import ac.grim.grimac.utils.chunks.ChunkPalette;
 import ac.grim.grimac.utils.chunks.ChunkSectionCache;
 import ac.grim.grimac.utils.chunks.Column;
 import ac.grim.grimac.utils.collisions.CollisionData;
@@ -378,6 +379,9 @@ public class CompensatedWorld implements PacketWorld {
 
                 // Copy-on-write: never mutate a shared section in place
                 chunk = ChunkSectionCache.detachSectionForWrite(column, sectionIndex, chunk);
+                if (blockVersion.isNewerThanOrEquals(ClientVersion.V_26_3) && chunk instanceof Chunk_v1_18 modernChunk) {
+                    ChunkPalette.ensureGlobalCapacity(modernChunk.getChunkData(), newState.getGlobalId());
+                }
                 chunk.set(x & 0xF, offsetY & 0xF, z & 0xF, combinedID);
                 player.compensatedGeysers.updateBlock(x, y, z, previousState, newState, minHeight);
 
