@@ -108,13 +108,23 @@ public class CompensatedWorld implements PacketWorld {
     }
 
     public void handlePredictionConfirmation(int prediction) {
-        for (Iterator<Int2ObjectMap.Entry<List<Vector3i>>> it = serverIsCurrentlyProcessingThesePredictions.int2ObjectEntrySet().iterator(); it.hasNext(); ) {
-            Map.Entry<Integer, List<Vector3i>> iter = it.next();
-            if (iter.getKey() <= prediction) {
-                applyBlockChanges(iter.getValue());
-                it.remove();
+        if (player.getClientVersion().isOlderThanOrEquals(ClientVersion.V_1_18_2)) return; // No predictions
+        // Nothing predicted and nothing waiting to be
+        if (serverIsCurrentlyProcessingThesePredictions.isEmpty() && player.placeUseItemPackets.isEmpty()) return;
+
+        // A place or use item is only replayed at the client's next movement packet or transaction, so the server can
+        // acknowledge it before we have predicted it. Look the predictions up once the client has this packet,
+        // by then anything it acknowledges has been replayed
+        player.sendTransaction();
+        player.latencyUtils.addRealTimeTask(player.lastTransactionSent.get(), () -> {
+            for (Iterator<Int2ObjectMap.Entry<List<Vector3i>>> it = serverIsCurrentlyProcessingThesePredictions.int2ObjectEntrySet().iterator(); it.hasNext(); ) {
+                Map.Entry<Integer, List<Vector3i>> iter = it.next();
+                if (iter.getKey() <= prediction) {
+                    revertPredictions(iter.getValue());
+                    it.remove();
+                }
             }
-        }
+        });
     }
 
     public void handleBlockBreakAck(@NotNull Vector3i blockPos, int blockState, DiggingAction action, boolean accepted) {
@@ -123,7 +133,12 @@ public class CompensatedWorld implements PacketWorld {
             player.sendTransaction(); // This packet actually matters
             player.latencyUtils.addRealTimeTask(player.lastTransactionSent.get(), () -> {
                 Vector3d playerPos = unackedActions.remove(key);
-                handleAck(blockPos, blockState, playerPos.getX(), playerPos.getY(), playerPos.getZ());
+                // No entry for clients outside 1.14.4 - 1.18.2, or when an earlier ack for the same block and action took it
+                if (playerPos == null) {
+                    revertBlock(blockPos, blockState);
+                } else {
+                    handleAck(blockPos, blockState, playerPos.getX(), playerPos.getY(), playerPos.getZ());
+                }
             });
         } else {
             unackedActions.remove(key);
@@ -138,7 +153,11 @@ public class CompensatedWorld implements PacketWorld {
 
     private void applyBlockChanges(@NotNull List<@NotNull Vector3i> toApplyBlocks) {
         player.sendTransaction();
-        player.latencyUtils.addRealTimeTask(player.lastTransactionSent.get(), () -> toApplyBlocks.forEach(blockPos -> {
+        player.latencyUtils.addRealTimeTask(player.lastTransactionSent.get(), () -> revertPredictions(toApplyBlocks));
+    }
+
+    private void revertPredictions(@NotNull List<@NotNull Vector3i> toApplyBlocks) {
+        toApplyBlocks.forEach(blockPos -> {
             BlockPrediction predictionData = originalServerBlocks.get(blockPos.getSerializedPosition());
 
             // We are the last to care about this prediction, remove it to stop memory leak
@@ -147,12 +166,13 @@ public class CompensatedWorld implements PacketWorld {
                 originalServerBlocks.remove(blockPos.getSerializedPosition());
                 handleAck(blockPos, predictionData.getOriginalBlockId(), predictionData.getPlayerX(), predictionData.getPlayerY(), predictionData.getPlayerZ());
             }
-        }));
+        });
     }
 
-    private void handleAck(@NotNull Vector3i blockPos, int originalBlockId, double playerX, double playerY, double playerZ) {
+    // Puts the server's block back, false if grim already had it
+    private boolean revertBlock(@NotNull Vector3i blockPos, int originalBlockId) {
         // If we need to change the world block state
-        if (getBlock(blockPos).getGlobalId() == originalBlockId) return;
+        if (getBlock(blockPos).getGlobalId() == originalBlockId) return false;
 
         player.blockHistory.add(
                 new BlockModification(
@@ -165,6 +185,12 @@ public class CompensatedWorld implements PacketWorld {
         );
 
         updateBlock(blockPos, originalBlockId);
+        return true;
+    }
+
+    private void handleAck(@NotNull Vector3i blockPos, int originalBlockId, double playerX, double playerY, double playerZ) {
+        if (!revertBlock(blockPos, originalBlockId)) return;
+
         WrappedBlockState state = WrappedBlockState.getByGlobalId(blockVersion, originalBlockId);
 
         // The player will teleport themselves if they get stuck in the reverted block
